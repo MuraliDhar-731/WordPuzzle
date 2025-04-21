@@ -63,28 +63,27 @@ if synsets:
     syn = synsets[0]
     st.markdown(f"📖 **Hint:** *{syn.definition()}*")
 
-    if st.session_state.attempts >= 2:
-        synonyms = set()
-        for s in synsets:
-            for lemma in s.lemmas():
-                w = lemma.name().lower().replace("_", " ")
-                if w != st.session_state.word:
-                    synonyms.add(w)
-        if synonyms:
-            st.markdown("🧠 **Synonyms:** " + ", ".join(sorted(synonyms)[:5]))
+    synonyms = set()
+    for s in synsets:
+        for lemma in s.lemmas():
+            w = lemma.name().lower().replace("_", " ")
+            if w != st.session_state.word:
+                synonyms.add(w)
+
+    if st.session_state.attempts >= 2 and synonyms:
+        st.markdown("🧠 **Synonyms:** " + ", ".join(sorted(synonyms)[:5]))
 
     if st.session_state.attempts >= 3 and syn.examples():
         st.markdown(f"💡 **Example:** *{syn.examples()[0]}*")
 
 # === Word Bank after 5+ attempts ===
-if st.session_state.attempts >= 5:
-    if synsets:
-        synonym_list = list(synonyms)
-        random.shuffle(synonym_list)
-        chosen = synonym_list[:5] + [st.session_state.word]
-        random.shuffle(chosen)
-        st.markdown("🔍 **Choose from these options (one is the answer!):**")
-        st.write(", ".join(f"`{w}`" for w in chosen))
+if st.session_state.attempts >= 5 and synonyms:
+    word_bank = list(synonyms)
+    random.shuffle(word_bank)
+    chosen = word_bank[:5] + [st.session_state.word]
+    random.shuffle(chosen)
+    st.markdown("🔍 **Choose from these options (one is the answer!):**")
+    st.write(", ".join(f"`{w}`" for w in chosen))
 
 # === Input ===
 guess = st.text_input("Enter a letter or full word:", key="guess_input_box")
@@ -174,7 +173,8 @@ if ''.join(st.session_state.masked) == st.session_state.word or st.session_state
         st.session_state.hint_requested = False
         st.session_state.solved = False
         st.session_state.pop("guess_input_box", None)
-        st.experimental_rerun()
+        st.rerun()  # ✅ Modern Streamlit rerun
+        
 
 # === History ===
 if st.session_state.solved_words:
