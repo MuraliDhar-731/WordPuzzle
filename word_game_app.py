@@ -3,19 +3,44 @@ import random
 import time
 import pandas as pd
 from nltk.corpus import wordnet as wn
-from nltk.corpus import words
 import nltk
 
-# First-time downloads (will run only once)
+# Downloads
 nltk.download('wordnet')
 nltk.download('omw-1.4')
-nltk.download('words')
 
-# === Load dictionary ===
-word_list = [word.lower() for word in words.words() if word.isalpha() and 4 <= len(word) <= 8]
-used_words = set()
+# === Function to get valid wordnet words ===
+def get_valid_wordnet_words(min_len=4, max_len=8):
+    wordnet_words = set(lemma.name().lower() for syn in wn.all_synsets() for lemma in syn.lemmas())
+    return sorted({w for w in wordnet_words if w.isalpha() and min_len <= len(w) <= max_len})
 
-# === Initialize game state ===
+word_list = get_valid_wordnet_words()
+
+# === Get word category and check if it's an animal ===
+def get_word_category(word):
+    synsets = wn.synsets(word)
+    if not synsets:
+        return "Unknown"
+    pos_map = {'n': "Noun", 'v': "Verb", 'a': "Adjective", 'r': "Adverb"}
+    pos = pos_map.get(synsets[0].pos(), "Other")
+
+    # Check if word is an animal
+    for syn in synsets:
+        if 'animal.n.01' in [h.name() for h in syn.hypernyms()]:
+            return "Animal"
+    return pos
+
+# === Hint provider ===
+def get_hint(word):
+    synsets = wn.synsets(word)
+    if synsets:
+        for syn in synsets:
+            definition = syn.definition()
+            if definition:
+                return f"Hint: {definition} (POS: {syn.pos()})"
+    return "No hint available from WordNet."
+
+# === Session state setup ===
 if 'start_time' not in st.session_state:
     st.session_state.start_time = None
 if 'word' not in st.session_state:
@@ -28,78 +53,82 @@ if 'attempts' not in st.session_state:
     st.session_state.attempts = 0
 if 'guessed_letters' not in st.session_state:
     st.session_state.guessed_letters = set()
+if 'solved_words' not in st.session_state:
+    st.session_state.solved_words = []
 
-# === Hint generator ===
-def get_hint(word):
-    synsets = wn.synsets(word)
-    if synsets:
-        for syn in synsets:
-            definition = syn.definition()
-            if definition:
-                return f"Hint: {definition} (POS: {syn.pos()})"
-    return "No hint available from WordNet."
-
-# === UI Elements ===
+# === UI ===
 st.title("🧠 WordBlitzML – Real-Time Word Puzzle")
-st.write("Guess the hidden word! Use hints if needed. Your solving time determines the word difficulty.")
+st.caption("Guess the hidden word! Use hints if needed. Your solving time determines the word difficulty.")
 
+# Start timer
 if st.session_state.start_time is None:
     st.session_state.start_time = time.time()
 
-# === Display the masked word ===
+# Word mask display
 masked_word_display = " ".join(st.session_state.masked)
+category = get_word_category(st.session_state.word)
 st.subheader(f"Word: {masked_word_display}")
+st.markdown(f"📚 **Category:** `{category}`")
 
-# === User input ===
+# Input
 guess = st.text_input("Enter a letter or full word:")
 
 if guess:
     guess = guess.lower()
     st.session_state.attempts += 1
 
-    if len(guess) == 1:  # Letter guess
+    if len(guess) == 1:
         st.session_state.guessed_letters.add(guess)
-        found = False
         for i, letter in enumerate(st.session_state.word):
             if letter == guess:
                 st.session_state.masked[i] = guess
-                found = True
-        if found:
-            st.success(f"✅ Letter '{guess}' is in the word!")
-        else:
+        if guess not in st.session_state.word:
             st.warning(f"❌ Letter '{guess}' is not in the word.")
-
-    elif guess == st.session_state.word:  # Full word guess
+    elif guess == st.session_state.word:
         st.session_state.masked = list(st.session_state.word)
 
-    # === Word completely guessed ===
     if ''.join(st.session_state.masked) == st.session_state.word:
+        # Word guessed
         time_taken = round(time.time() - st.session_state.start_time, 2)
         difficulty = "Easy" if time_taken < 10 else "Medium" if time_taken < 25 else "Hard"
 
-        st.success(f"🎉 Correct! The word was **'{st.session_state.word}'**.")
-        st.write(f"⏱️ Time taken: **{time_taken} seconds**")
-        st.write(f"🧠 Predicted Difficulty: **{difficulty}**")
-        st.write(f"📌 Attempts: {st.session_state.attempts} | 🔍 Hints used: {st.session_state.hints_used}")
+        # Color-coded badge
+        color_map = {"Easy": "🟢", "Medium": "🟡", "Hard": "🔴"}
 
-        if st.button("Next Word"):
-            # Reset state for a new word
-            st.session_state.word = random.choice([w for w in word_list if w not in used_words])
-            used_words.add(st.session_state.word)
+        st.success(f"🎉 Correct! The word was **{st.session_state.word}**")
+        st.write(f"⏱️ Time: **{time_taken} s**  |  🧠 Difficulty: {color_map[difficulty]} **{difficulty}**")
+        st.write(f"📌 Attempts: {st.session_state.attempts} | 🔍 Hints: {st.session_state.hints_used}")
+
+        # Save to solved list
+        st.session_state.solved_words.append({
+            "Word": st.session_state.word,
+            "Category": category,
+            "Time (s)": time_taken,
+            "Difficulty": difficulty,
+            "Attempts": st.session_state.attempts,
+            "Hints Used": st.session_state.hints_used
+        })
+
+        if st.button("➡️ Next Word"):
+            st.session_state.word = random.choice(word_list)
             st.session_state.masked = ['_' for _ in st.session_state.word]
             st.session_state.start_time = time.time()
             st.session_state.hints_used = 0
             st.session_state.attempts = 0
             st.session_state.guessed_letters = set()
-    else:
-        st.info("Keep guessing!")
 
-# === Hint Button ===
+# Hint button
 if st.button("🔍 Get a Hint"):
     st.session_state.hints_used += 1
     st.info(get_hint(st.session_state.word))
 
-# === Optional: Show guessed letters so far ===
+# Show guessed letters
 if st.session_state.guessed_letters:
     guessed = ", ".join(sorted(st.session_state.guessed_letters))
     st.caption(f"🔤 Letters guessed: {guessed}")
+
+# History Table
+if st.session_state.solved_words:
+    st.markdown("### 🗃️ Solved Word History")
+    df = pd.DataFrame(st.session_state.solved_words)
+    st.dataframe(df, use_container_width=True)
