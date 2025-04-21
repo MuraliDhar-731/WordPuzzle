@@ -1,5 +1,3 @@
 streamlit
 nltk
 pandas
-scikit-learn
-textstat
