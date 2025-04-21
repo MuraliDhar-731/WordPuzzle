@@ -8,14 +8,12 @@ import nltk
 nltk.download('wordnet')
 nltk.download('omw-1.4')
 
-# === Load Valid Words ===
 def get_valid_wordnet_words(min_len=4, max_len=10):
     wordnet_words = set(lemma.name().lower() for syn in wn.all_synsets() for lemma in syn.lemmas())
     return sorted({w for w in wordnet_words if w.isalpha() and min_len <= len(w) <= max_len})
 
 word_list = get_valid_wordnet_words()
 
-# === Category Emoji ===
 def get_word_category_icon(word):
     synsets = wn.synsets(word)
     if not synsets:
@@ -34,7 +32,7 @@ def get_word_category_icon(word):
 defaults = {
     'start_time': None, 'word': None, 'masked': None, 'hints_used': 0,
     'attempts': 0, 'guessed_letters': set(), 'solved_words': [],
-    'hint_requested': False, 'solved': False
+    'solved': False
 }
 for key, val in defaults.items():
     if key not in st.session_state:
@@ -138,6 +136,21 @@ if guess:
         st.markdown(f"**{guess.upper()}**<br>{' '.join(result_display)}", unsafe_allow_html=True)
         st.error("🚫 Not quite! Here's your feedback:")
 
+# === BONUS BUTTON ===
+if st.button("🔍 Show a Bonus Hint"):
+    st.session_state.hints_used += 1
+    if synsets:
+        syn = synsets[0]
+        hyp = syn.hypernyms()
+        if hyp:
+            st.info(f"🔎 **General category:** {hyp[0].lemma_names()[0]}")
+        try:
+            st.info(f"🧬 **Lexical file:** `{syn.lexname()}`")
+        except:
+            pass
+        if st.session_state.word in ["shravan", "karthika"]:
+            st.info("🌐 **Origin:** Sanskrit root used in Hindu lunar calendars.")
+
 # === Guessed Letters ===
 if st.session_state.guessed_letters:
     guessed = ", ".join(sorted(st.session_state.guessed_letters))
@@ -170,11 +183,9 @@ if ''.join(st.session_state.masked) == st.session_state.word or st.session_state
         st.session_state.hints_used = 0
         st.session_state.attempts = 0
         st.session_state.guessed_letters = set()
-        st.session_state.hint_requested = False
         st.session_state.solved = False
         st.session_state.pop("guess_input_box", None)
-        st.rerun()  # ✅ Modern Streamlit rerun
-        
+        st.rerun()
 
 # === History ===
 if st.session_state.solved_words:
