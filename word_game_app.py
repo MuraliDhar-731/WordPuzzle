@@ -2,18 +2,28 @@ import streamlit as st
 import random
 import time
 import pandas as pd
-from nltk.corpus import wordnet as wn
 import nltk
+from nltk.corpus import wordnet as wn
 
-nltk.download('wordnet')
-nltk.download('omw-1.4')
+# === Safe WordNet download ===
+try:
+    wn.synsets("dog")
+except LookupError:
+    nltk.download("wordnet")
+    nltk.download("omw-1.4")
 
+# === Word List Generator ===
 def get_valid_wordnet_words(min_len=4, max_len=10):
-    wordnet_words = set(lemma.name().lower() for syn in wn.all_synsets() for lemma in syn.lemmas())
+    wordnet_words = set(
+        lemma.name().lower()
+        for syn in wn.all_synsets()
+        for lemma in syn.lemmas()
+    )
     return sorted({w for w in wordnet_words if w.isalpha() and min_len <= len(w) <= max_len})
 
 word_list = get_valid_wordnet_words()
 
+# === Category Emoji ===
 def get_word_category_icon(word):
     synsets = wn.synsets(word)
     if not synsets:
