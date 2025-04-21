@@ -5,21 +5,21 @@ import pandas as pd
 import nltk
 from nltk.corpus import wordnet as wn
 
-# === Safe WordNet download ===
-try:
-    wn.synsets("dog")
-except LookupError:
-    nltk.download("wordnet")
-    nltk.download("omw-1.4")
-
-# === Word List Generator ===
+# === Safe lazy download + guard ===
 def get_valid_wordnet_words(min_len=4, max_len=10):
-    wordnet_words = set(
-        lemma.name().lower()
-        for syn in wn.all_synsets()
-        for lemma in syn.lemmas()
-    )
-    return sorted({w for w in wordnet_words if w.isalpha() and min_len <= len(w) <= max_len})
+    try:
+        wn.ensure_loaded()
+        wordnet_words = set(
+            lemma.name().lower()
+            for syn in wn.all_synsets()
+            for lemma in syn.lemmas()
+        )
+        return sorted({w for w in wordnet_words if w.isalpha() and min_len <= len(w) <= max_len})
+    except Exception:
+        nltk.download("wordnet")
+        nltk.download("omw-1.4")
+        st.warning("🔄 WordNet is downloading... Please **reload** the app in a few seconds.")
+        st.stop()
 
 word_list = get_valid_wordnet_words()
 
@@ -53,7 +53,7 @@ if st.session_state.word is None:
     st.session_state.masked = ['_' for _ in st.session_state.word]
     st.session_state.start_time = time.time()
 
-# === UI Start ===
+# === UI ===
 st.set_page_config(page_title="WordBlitzML", layout="centered")
 st.markdown("<style>div.row-widget.stTextInput > label {font-weight:bold;}</style>", unsafe_allow_html=True)
 
@@ -146,7 +146,7 @@ if guess:
         st.markdown(f"**{guess.upper()}**<br>{' '.join(result_display)}", unsafe_allow_html=True)
         st.error("🚫 Not quite! Here's your feedback:")
 
-# === BONUS BUTTON ===
+# === BONUS HINT BUTTON ===
 if st.button("🔍 Show a Bonus Hint"):
     st.session_state.hints_used += 1
     if synsets:
