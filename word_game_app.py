@@ -6,6 +6,8 @@ import time
 import pandas as pd
 import nltk
 from nltk.corpus import wordnet as wn
+import json
+import os
 
 # === Safe lazy download + guard ===
 def get_valid_wordnet_words(min_len=4, max_len=10):
@@ -23,11 +25,47 @@ def get_valid_wordnet_words(min_len=4, max_len=10):
         st.warning("🔄 WordNet is downloading... Please **reload** the app in a few seconds.")
         st.stop()
 
+# === Q-Learning Setup for Hint Pacing ===
+Q_FILE = "q_table.json"
+ACTIONS = ["do_nothing", "show_synonym", "show_example"]
+ALPHA = 0.1
+GAMMA = 0.9
+EPSILON = 0.2
+
+def load_q_table():
+    if os.path.exists(Q_FILE):
+        with open(Q_FILE, "r") as f:
+            return json.load(f)
+    return {}
+
+def save_q_table(q):
+    with open(Q_FILE, "w") as f:
+        json.dump(q, f)
+
+def get_state_key(attempts, hints_shown):
+    return f"{attempts}_{hints_shown}"
+
+def choose_action(state, q):
+    if state not in q:
+        q[state] = {a: 0 for a in ACTIONS}
+    if random.random() < EPSILON:
+        return random.choice(ACTIONS)
+    return max(q[state], key=q[state].get)
+
+def update_q_table(q, state, action, reward, next_state):
+    if next_state not in q:
+        q[next_state] = {a: 0 for a in ACTIONS}
+    old_value = q[state][action]
+    next_max = max(q[next_state].values())
+    q[state][action] = old_value + ALPHA * (reward + GAMMA * next_max - old_value)
+    return q
+
+
 # === Difficulty Mode Selector ===
 st.sidebar.title("🎮 Select Difficulty")
 mode = st.sidebar.radio("Choose your challenge level:", ["Easy", "Medium", "Hard"])
 
-# Map difficulty to word length range
+# Word length per difficulty
 if mode == "Easy":
     min_len, max_len = 4, 5
 elif mode == "Medium":
@@ -37,7 +75,7 @@ else:
 
 word_list = get_valid_wordnet_words(min_len, max_len)
 
-# === Category Emoji ===
+# === Category Icon
 def get_word_category_icon(word):
     synsets = wn.synsets(word)
     if not synsets:
@@ -52,13 +90,12 @@ def get_word_category_icon(word):
         return "🐾 Animal"
     return category
 
-# === Init Session ===
-defaults = {
+# === Init Session State ===
+for key, val in {
     'start_time': None, 'word': None, 'masked': None, 'hints_used': 0,
     'attempts': 0, 'guessed_letters': set(), 'solved_words': [],
-    'solved': False
-}
-for key, val in defaults.items():
+    'solved': False, 'hints_shown': set()
+}.items():
     if key not in st.session_state:
         st.session_state[key] = val
 
@@ -69,7 +106,6 @@ if st.session_state.word is None:
 
 # === Header UI ===
 st.title("🧠WORD PUZZLE - A DAILY COMPANION FOR A NEW WORD")
-# === Live Timer Display ===
 elapsed_time = int(time.time() - st.session_state.start_time)
 st.caption(f"⏱️ Time Elapsed: **{elapsed_time} seconds** – Smart hints guide you to the word!")
 
@@ -78,28 +114,37 @@ category_icon = get_word_category_icon(st.session_state.word)
 st.subheader(f"Word: {masked_display} ({len(st.session_state.word)} letters)")
 st.markdown(f"📚 **Category:** `{category_icon}`")
 
-# === Auto Hints ===
-synsets = wn.synsets(st.session_state.word)
-if synsets:
-    syn = synsets[0]
-    st.markdown(f"📖 **Hint:** *{syn.definition()}*")
 
-    synonyms = set()
+# === RL Adaptive Hint Pacing ===
+synsets = wn.synsets(st.session_state.word)
+definition = synsets[0].definition() if synsets else "No definition available"
+st.markdown(f"📖 **Hint:** *{definition}*")
+
+synonyms = set()
+examples = []
+if synsets:
     for s in synsets:
         for lemma in s.lemmas():
-            w = lemma.name().lower().replace("_", " ")
-            if w != st.session_state.word:
-                synonyms.add(w)
+            word = lemma.name().lower().replace("_", " ")
+            if word != st.session_state.word:
+                synonyms.add(word)
+        examples.extend(s.examples())
 
-    if (mode != "Hard" and st.session_state.attempts >= 2) or mode == "Easy":
-        if synonyms:
-            st.markdown("🧠 **Synonyms:** " + ", ".join(sorted(synonyms)[:5]))
+# Determine RL state and action
+q_table = load_q_table()
+state = get_state_key(st.session_state.attempts, len(st.session_state.hints_shown))
+action = choose_action(state, q_table)
 
-    if (mode != "Hard" and st.session_state.attempts >= 3) or mode == "Easy":
-        if syn.examples():
-            st.markdown(f"💡 **Example:** *{syn.examples()[0]}*")
+# Take RL hint action
+if action == "show_synonym" and "synonym" not in st.session_state.hints_shown and synonyms:
+    st.markdown("🧠 **Synonyms:** " + ", ".join(sorted(synonyms)[:5]))
+    st.session_state.hints_shown.add("synonym")
 
-# === Word Bank after 5+ attempts ===
+if action == "show_example" and "example" not in st.session_state.hints_shown and examples:
+    st.markdown(f"💡 **Example:** *{examples[0]}*")
+    st.session_state.hints_shown.add("example")
+
+# Word Bank (unchanged logic)
 if st.session_state.attempts >= 5 and synonyms:
     word_bank = list(synonyms)
     random.shuffle(word_bank)
@@ -108,7 +153,7 @@ if st.session_state.attempts >= 5 and synonyms:
     st.markdown("🔍 **Choose from these options (one is the answer!):**")
     st.write(", ".join(f"`{w}`" for w in chosen))
 
-# === Input ===
+
 guess = st.text_input("Enter a letter or full word:", key="guess_input_box")
 
 if guess:
@@ -116,65 +161,58 @@ if guess:
     word = st.session_state.word
     st.session_state.attempts += 1
 
+    # === Reward system ===
+    reward = -1  # penalty for each interaction by default
+
     if len(guess) == 1:
         st.session_state.guessed_letters.add(guess)
+        found = False
         for i, letter in enumerate(word):
             if letter == guess:
                 st.session_state.masked[i] = guess
-        if guess not in word:
+                found = True
+        if found:
+            reward = +1
+        else:
             st.warning(f"❌ Letter '{guess}' is not in the word.")
 
     elif len(guess) != len(word):
         st.warning(f"⚠️ The word has **{len(word)}** letters. Try a guess of that length.")
-
     elif guess == word:
         st.session_state.masked = list(word)
         st.session_state.solved = True
-
+        reward = +10  # successful solve
     else:
+        # Word-level guess with partial feedback
         result_display = []
         used_positions = [False] * len(word)
-        correct_positions = 0
-
         for i in range(len(word)):
             if guess[i] == word[i]:
                 st.session_state.masked[i] = guess[i]
                 result_display.append(f"🟩 **{guess[i]}**")
                 used_positions[i] = True
-                correct_positions += 1
             else:
                 result_display.append("")
-
         for i in range(len(word)):
             if result_display[i] == "":
                 if guess[i] in word:
                     found = False
                     for j in range(len(word)):
                         if guess[i] == word[j] and not used_positions[j]:
-                            found = True
                             used_positions[j] = True
+                            found = True
                             break
                     result_display[i] = f"🟨 **{guess[i]}**" if found else f"⬛ **{guess[i]}**"
                 else:
                     result_display[i] = f"⬛ **{guess[i]}**"
-
         st.markdown(f"**{guess.upper()}**<br>{' '.join(result_display)}", unsafe_allow_html=True)
         st.error("🚫 Not quite! Here's your feedback:")
 
-# === BONUS HINT BUTTON ===
-if st.button("🔍 Show a Bonus Hint"):
-    st.session_state.hints_used += 1
-    if synsets:
-        syn = synsets[0]
-        hyp = syn.hypernyms()
-        if hyp:
-            st.info(f"🔎 **General category:** {hyp[0].lemma_names()[0]}")
-        try:
-            st.info(f"🧬 **Lexical file:** `{syn.lexname()}`")
-        except:
-            pass
-        if st.session_state.word in ["shravan", "karthika"]:
-            st.info("🌐 **Origin:** Sanskrit root used in Hindu lunar calendars.")
+    # === RL Q-Update ===
+    next_state = get_state_key(st.session_state.attempts, len(st.session_state.hints_shown))
+    q_table = update_q_table(q_table, state, action, reward, next_state)
+    save_q_table(q_table)
+
 
 # === Guessed Letters ===
 if st.session_state.guessed_letters:
@@ -223,6 +261,7 @@ if ''.join(st.session_state.masked) == st.session_state.word or st.session_state
         st.session_state.attempts = 0
         st.session_state.guessed_letters = set()
         st.session_state.solved = False
+        st.session_state.hints_shown = set()
         st.session_state.pop("guess_input_box", None)
         st.rerun()
 
