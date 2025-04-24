@@ -68,8 +68,8 @@ if st.session_state.word is None:
     st.session_state.start_time = time.time()
 
 # === Header UI ===
-st.title("🧠 WordBlitzML – Real-Time Word Puzzle")
-st.caption("Smart hints guide you to the word!")
+st.title("🧠WORD PUZZLE - A DAILY COMPANION FOR A NEW WORD")
+st.caption("SMARTER WAY FOR LEARNING WORDS")
 
 masked_display = " ".join(st.session_state.masked)
 category_icon = get_word_category_icon(st.session_state.word)
