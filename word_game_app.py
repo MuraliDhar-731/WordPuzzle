@@ -185,9 +185,9 @@ if ''.join(st.session_state.masked) == st.session_state.word or st.session_state
 
     # Composite Difficulty Score
     score = (
-        time_taken * 2 +
-        st.session_state.hints_used * 10 +
-        st.session_state.attempts * 5
+        time_taken * 1 +
+        st.session_state.hints_used * 5 +
+        st.session_state.attempts * 3
     )
 
     if score < 40:
