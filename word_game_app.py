@@ -1,9 +1,14 @@
 import streamlit as st
+
+# ✅ MUST BE FIRST
+st.set_page_config(page_title="WordBlitzML", layout="centered")
+
 import random
 import time
 import pandas as pd
 import nltk
 from nltk.corpus import wordnet as wn
+
 
 # === Safe lazy download + guard ===
 def get_valid_wordnet_words(min_len=4, max_len=10):
