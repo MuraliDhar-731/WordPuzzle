@@ -21,7 +21,19 @@ def get_valid_wordnet_words(min_len=4, max_len=10):
         st.warning("🔄 WordNet is downloading... Please **reload** the app in a few seconds.")
         st.stop()
 
-word_list = get_valid_wordnet_words()
+# === Difficulty Mode Selector ===
+st.sidebar.title("🎮 Select Difficulty")
+mode = st.sidebar.radio("Choose your challenge level:", ["Easy", "Medium", "Hard"])
+
+# Map difficulty to word length range
+if mode == "Easy":
+    min_len, max_len = 4, 5
+elif mode == "Medium":
+    min_len, max_len = 6, 7
+else:
+    min_len, max_len = 8, 10
+
+word_list = get_valid_wordnet_words(min_len, max_len)
 
 # === Category Emoji ===
 def get_word_category_icon(word):
@@ -78,11 +90,14 @@ if synsets:
             if w != st.session_state.word:
                 synonyms.add(w)
 
-    if st.session_state.attempts >= 2 and synonyms:
-        st.markdown("🧠 **Synonyms:** " + ", ".join(sorted(synonyms)[:5]))
+    # Hint access varies by difficulty mode
+    if (mode != "Hard" and st.session_state.attempts >= 2) or mode == "Easy":
+        if synonyms:
+            st.markdown("🧠 **Synonyms:** " + ", ".join(sorted(synonyms)[:5]))
 
-    if st.session_state.attempts >= 3 and syn.examples():
-        st.markdown(f"💡 **Example:** *{syn.examples()[0]}*")
+    if (mode != "Hard" and st.session_state.attempts >= 3) or mode == "Easy":
+        if syn.examples():
+            st.markdown(f"💡 **Example:** *{syn.examples()[0]}*")
 
 # === Word Bank after 5+ attempts ===
 if st.session_state.attempts >= 5 and synonyms:
@@ -169,7 +184,21 @@ if st.session_state.guessed_letters:
 # === Win Condition ===
 if ''.join(st.session_state.masked) == st.session_state.word or st.session_state.solved:
     time_taken = round(time.time() - st.session_state.start_time, 2)
-    difficulty = "Easy" if time_taken < 10 else "Medium" if time_taken < 25 else "Hard"
+
+    # === Composite Difficulty Score ===
+    score = (
+        time_taken * 2 +
+        st.session_state.hints_used * 10 +
+        st.session_state.attempts * 5
+    )
+
+    if score < 40:
+        difficulty = "Easy"
+    elif score < 80:
+        difficulty = "Medium"
+    else:
+        difficulty = "Hard"
+
     color_map = {"Easy": "🟢", "Medium": "🟡", "Hard": "🔴"}
 
     st.success(f"🎉 Correct! The word was **{st.session_state.word}**")
