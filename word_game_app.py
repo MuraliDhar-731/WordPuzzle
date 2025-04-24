@@ -1,6 +1,4 @@
 import streamlit as st
-
-# ✅ MUST BE FIRST
 st.set_page_config(page_title="WordBlitzML", layout="centered")
 
 import random
@@ -8,7 +6,6 @@ import time
 import pandas as pd
 import nltk
 from nltk.corpus import wordnet as wn
-
 
 # === Safe lazy download + guard ===
 def get_valid_wordnet_words(min_len=4, max_len=10):
@@ -70,10 +67,7 @@ if st.session_state.word is None:
     st.session_state.masked = ['_' for _ in st.session_state.word]
     st.session_state.start_time = time.time()
 
-# === UI ===
-st.set_page_config(page_title="WordBlitzML", layout="centered")
-st.markdown("<style>div.row-widget.stTextInput > label {font-weight:bold;}</style>", unsafe_allow_html=True)
-
+# === Header UI ===
 st.title("🧠 WordBlitzML – Real-Time Word Puzzle")
 st.caption("Smart hints guide you to the word!")
 
@@ -95,7 +89,6 @@ if synsets:
             if w != st.session_state.word:
                 synonyms.add(w)
 
-    # Hint access varies by difficulty mode
     if (mode != "Hard" and st.session_state.attempts >= 2) or mode == "Easy":
         if synonyms:
             st.markdown("🧠 **Synonyms:** " + ", ".join(sorted(synonyms)[:5]))
@@ -190,7 +183,7 @@ if st.session_state.guessed_letters:
 if ''.join(st.session_state.masked) == st.session_state.word or st.session_state.solved:
     time_taken = round(time.time() - st.session_state.start_time, 2)
 
-    # === Composite Difficulty Score ===
+    # Composite Difficulty Score
     score = (
         time_taken * 2 +
         st.session_state.hints_used * 10 +
