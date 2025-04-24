@@ -69,7 +69,9 @@ if st.session_state.word is None:
 
 # === Header UI ===
 st.title("🧠WORD PUZZLE - A DAILY COMPANION FOR A NEW WORD")
-st.caption("SMARTER WAY FOR LEARNING WORDS")
+# === Live Timer Display ===
+elapsed_time = int(time.time() - st.session_state.start_time)
+st.caption(f"⏱️ Time Elapsed: **{elapsed_time} seconds** – Smart hints guide you to the word!")
 
 masked_display = " ".join(st.session_state.masked)
 category_icon = get_word_category_icon(st.session_state.word)
